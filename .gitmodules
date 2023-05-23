@@ -1,0 +1,18 @@
+[submodule "ai"]
+	path = ai
+	url = git@github.com:oy3o/ai.git
+[submodule "dataflow"]
+	path = dataflow
+	url = git@github.com:oy3o/dataflow.git
+[submodule "editor"]
+	path = editor
+	url = git@github.com:oy3o/editor.git
+[submodule "input"]
+	path = input
+	url = git@github.com:oy3o/input.git
+[submodule "statelist"]
+	path = statelist
+	url = git@github.com:oy3o/statelist.git
+[submodule "translator"]
+	path = translator
+	url = git@github.com:oy3o/translator.git

@@ -1,0 +1,3 @@
+deco
+numba
+tiktoken
