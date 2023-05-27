@@ -30,29 +30,37 @@ def maxwidth(text, width):
     if len(text) > width:
         return text[:width-3]+ '...'
     return text
-def uni_snippets(s,w):
+
+def split_bywidth(str:str, width:int):
     list = []
     chunk = ''
     count = 0
-    for c in s:
+    for c in str:
         cw = wcwidth.wcwidth(c)
-        if count + cw > w:
-            list.append((chunk, random_word()))
+        if count + cw > width:
+            list.append(chunk)
             chunk = c
             count = cw
         else:
             chunk += c
             count += cw
     if chunk:
-        list.append((chunk, random_word()))
-    if not list or count == w:
-        list.append(('', random_word()))
+        list.append(chunk)
+    if not list or count == width:
+        list.append('')
     return list
 
-def snippet_index(s,ss):
-    for i, x in enumerate(s):
-        if x[1] == ss[1]:
-            return i
+def splitstrings_bywidth(lines:list[str], width:int, a:int=None, b:int=None):
+    result = []
+    a = 0 if a == None else max(0, min(a, len(lines)))
+    b = len(lines) if b == None else min(b, len(lines))
+    for i in range(a, b):
+        line = lines[i]
+        fragments = split_bywidth(line, width)
+        for j in range(len(fragments)):
+            text = fragments[j]
+            result.append((text, i, j))
+    return result
 
 def split_first(args_text, spliter, nosp = False):
     try:

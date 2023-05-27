@@ -1,7 +1,6 @@
+from oy3opy import *
 import asyncio
 import queue
-import threading
-from typing import List, Tuple, Callable
 
 
 def isAsync(func):
@@ -44,7 +43,7 @@ class Task:
             return func(e)
 
     def threading(self):
-        return threading.Thread(self.do)
+        return threading.Thread(target=self.do)
 
 class TaskID:
     pass

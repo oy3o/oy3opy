@@ -1,12 +1,13 @@
-from typing import Iterable, Callable, Mapping, get_type_hints
+from typing import get_type_hints, TypeVar, Generic, Iterable, Callable, Mapping, List, Tuple
 from inspect import signature
 from copy import deepcopy
-from numba import jit, njit as typed , byte, uint32 as u32, uint64 as u64, char, int32 as i32, int64 as i64, uintp as pointer, float32 as f32, float64 as f64
+from numba import jit, njit, byte, uint32 as u32, uint64 as u64, char, int32 as i32, int64 as i64, uintp as pointer, float32 as f32, float64 as f64
 from dataclasses import dataclass
 from functools import wraps, cache, lru_cache, partial as bind
-from deco import concurrent as asyncthread, synchronized as syncthread
+from deco import concurrent, synchronized
 from abc import ABC as Interface, abstractmethod
-from . import utils
+import threading
+import time
 
 bytes = type(byte([]))
 byte = type(byte(0))
@@ -19,6 +20,15 @@ pointer = type(pointer(0))
 f32 = type(f32(0))
 f64 = type(f64(0))
 
+class undefined: pass
+
+def setdefault(o:object, name, default):
+    value = getattr(o, name, undefined)
+    if value == undefined:
+        object.__setattr__(o, name, default)
+        return default
+    return value
+
 def isIterable(o): return isinstance(o, Iterable)
 def isMapping(o): return isinstance(o, Mapping)
 def isCallable(o): return isinstance(o, Callable)
@@ -27,7 +37,7 @@ class template:
     def __init__(self, default) -> None:
         self.default = default
         self.registry = {}
-    
+
     def register(self, typed_func):
         sig = tuple([*get_type_hints(typed_func).values()])
         if len(sig) != len(signature(typed_func).parameters.values()):
@@ -36,148 +46,214 @@ class template:
 
     def __call__(self, *args):
         for sig, fun in self.registry.items():
+            if len(args) != len(sig):
+                hit = False
+                continue
             hit = True
             for i, arg in enumerate(args):
                 if not (((type(sig[i]) == type) and isinstance(arg, sig[i])) or isinstance(arg, type(sig[i]))):
                     hit = False
                     break
             if hit:
-                fun(*args)
-                hit = True
-                break
+                return fun(*args)
         if not hit:
-            self.default(*args)
+            return self.default(*args)
 
 
 class members:
     def __init__(self, *args):
         self.members = args
+
     def __call__(self, klass):
         if not isinstance(klass, type):
             raise TypeError('members can only decorate classes')
-        klass_init = klass.__init__
+        members = self.members
 
-        @wraps(klass.__init__)
-        def __init__(_self, *args, **kwds):
-            o = klass_init(_self, *args,**kwds)
-            for (member, default) in self.members:
-                klass_member = getattr(klass, member, None)
-                if klass_member is type(default):
-                    if type(klass_member) == set:
-                        klass_member = deepcopy(default).union(klass_member)
-                    elif isMapping(klass_member):
-                        klass_member = {**deepcopy(default), **klass_member}
-                    elif isIterable(klass_member):
-                        klass_member = [*deepcopy(default), *klass_member]
-                if klass_member == None:
-                    klass_member = deepcopy(default)
-                setattr(_self, member, klass_member)
-            return o
-
-        klass.__init__ = __init__
-        return klass
+        class WithMembers(klass):
+            @wraps(klass.__init__)
+            def __init__(self, *args, **kwds):
+                super().__init__(*args,**kwds)
+                for (member, default) in members:
+                    klass_member = getattr(self, member, None)
+                    if isinstance(klass_member, type(default)):
+                        if type(klass_member) == set:
+                            klass_member = deepcopy(default).union(klass_member)
+                        elif isMapping(klass_member):
+                            klass_member = {**deepcopy(default), **klass_member}
+                        elif isIterable(klass_member):
+                            klass_member = [*deepcopy(default), *klass_member]
+                    if klass_member == None:
+                        klass_member = deepcopy(default)
+                    setattr(self, member, klass_member)
+        return WithMembers
 
 
 class subscribe:
-    def __init__(self, e = None):
-        if isinstance(e, type):
-            self.events = []
-            self(e)
-        else:
-            self.events = e
+    def __init__(self, events=[], single = False):
+        self.events = events
+        self.single = single
+
     def __call__(self, klass):
         if not isinstance(klass, type):
             raise TypeError('subscribe can only decorate classes')
-        hub = {}
+        eventshub = {}
+        events = self.events
+        single = self.single
 
-        klass_init = klass.__init__
-        @wraps(klass.__init__)
-        def __init__(_self, *args, **kwds):
-            o = klass_init(_self, *args, **kwds)
-            _self.trigger = bind(subscribe.trigger, hub, self.events)
-            _self.subscribe = bind(subscribe.subscribe, hub, self.events)
-            _self.unsubscribe = bind(subscribe.unsubscribe, hub, self.events)
-            return o
+        class EventsHub(klass):
+            @wraps(klass.__init__)
+            def __init__(self, *args, **kwds):
+                super().__init__(*args, **kwds)
+                self.eventshub = eventshub if single else deepcopy({})
+            def trigger(self, event, *args):
+                if (not events) or (event in events):
+                    listeners = self.eventshub.get(event, [])
+                    if (len(args) == 1) and isMapping(args[0]):
+                        e = args[0]
+                        e.update({'event': event})
+                        for listener in listeners:
+                            listener(e)
+                    else:
+                        for listener in listeners:
+                            listener(*args)
+                else:
+                    raise ValueError('Invalid event')
 
-        klass.__init__ = __init__
-        return klass
+            def subscribe(self, event, listener):
+                if callable(listener) and ((not events) or (event in events)):
+                    self.eventshub.setdefault(event, []).append(listener)
+                else:
+                    raise ValueError('Invalid event or listener')
 
-    def trigger(hub, events, event, *args):
-        if (not events) or (event in events):
-            listeners = hub.get(event, [])
-            if (len(args) == 1) and isMapping(args[0]):
-                e = args[0]
-                e.update({'event': event})
-                for listener in listeners:
-                    listener(e)
-            else:
-                for listener in listeners:
-                    listener(*args)
-        else:
-            raise ValueError('Invalid event')
-
-    def subscribe(hub, events, event, listener):
-        if callable(listener) and ((not events) or (event in events)):
-            hub.setdefault(event, []).append(listener)
-        else:
-            raise ValueError('Invalid event or listener')
-
-    def unsubscribe(hub, events, event, listener):
-        if callable(listener) and ((not events) or (event in events)):
-            if listener in hub.get(event, []):
-                hub[event].remove(listener)
-        else:
-            raise ValueError('Invalid event')
+            def unsubscribe(self, event, listener):
+                if callable(listener) and ((not events) or (event in events)):
+                    if listener in self.eventshub.get(event, []):
+                        self.eventshub[event].remove(listener)
+                else:
+                    raise ValueError('Invalid event')
+        return EventsHub
 
 
+class Proxy:
+    def __init__(self, target: object, handler: object) -> None:
+        self.target = target
+        self.handler = handler
 
-@dataclass
+    @property
+    def __dict__(self): return object.__getattribute__(self, 'target').__dict__
+    def __dir__(self): return object.__getattribute__(self, 'target').__dir__
+    def __getattribute__(self, name):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'getattr', undefined)
+        if func == undefined:
+            return object.__getattribute__(target, name)
+        return func(target, name)
+    def __setattribute__(self, name, value):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'setattr', undefined)
+        if func == undefined:
+            return object.__setattribute__(target, name, value)
+        return func(target, name, value)
+    def __delattribute__(self, name):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'delattr', undefined)
+        if func == undefined:
+            return object.__delattribute__(target, name)
+        return func(target, name)
+    def __getitem__(self, key):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'getitem', undefined)
+        if func == undefined:
+            return target.__getitem__(key)
+        return func(target, key)
+    def __setitem__(self, key, value):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'setitem', undefined)
+        if func == undefined:
+            return target.__setitem__(key, value)
+        return func(target, key, value)
+    def __len__(self):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'len', undefined)
+        if func == undefined:
+            return len(target) if isIterable(target) else True
+        return func(target)
+    def __iter__(self):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'iter', undefined)
+        if func == undefined:
+            return iter(target)
+        return func(target)
+    def __keys__(self):
+        target = object.__getattribute__(self, 'target')
+        func = getattr(object.__getattribute__(self, 'handler'), 'keys', undefined)
+        if func == undefined:
+            return target.__keys__()
+        return func(target)
+
+
+
+
 class commands:
-    commands:list
+    def __init__(self, commands: list) -> None:
+        self.commands = commands
 
     def __call__(self, klass):
         if not isinstance(klass, type):
             raise TypeError('members can only decorate classes')
+        commands = self.commands
 
         class app:
-            pass
-        app.__init__ = klass.__init__
-        for method in self.commands:
-            setattr(app, method, getattr(klass, method))
+            @wraps(klass.__init__)
+            def __init__(self, *args, **kwargs):
+                self.instance = klass(*args, **kwargs)
 
+            def __getattribute__(self, name):
+                if name in commands:
+                    return getattr(object.__getattribute__(self, 'instance'), name)
+                else:
+                    raise AttributeError(f"invalid access, {name} not exposed by commands")
         return app
 
 
-class Proxy:
-    def __init__(self, target, handler):
-        self.target = target
-        self.handler = handler
+def throttle(interval):
+    last_time = {}
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            now = time.time()
+            if (func not in last_time) or (now - last_time[func] >= interval):
+                result = func(*args, **kwargs)
+                last_time[func] = now
+                return result
+            else:
+                return None
+        return wrapper
+    return decorator
 
-    def __getattribute__(self, name):
-        return getattr(self.handler, 'getattr', self.target.__getattribute__)(name)
-
-    def __setattribute__(self, name):
-        return getattr(self.handler, 'setattr', self.target.__setattribute__)(name)
-
-    def __delattribute__(self, name):
-        return getattr(self.handler, 'delattr', self.target.__delattribute__)(name)
-
-    @property
-    def __dict__(self):
-        return self.target.__dict__
-
-    def __getitem__(self, key):
-        return getattr(self.handler, 'getitem', self.target.__getitem__)(key)
-
-    def __setitem__(self, key):
-        return getattr(self.handler, 'setitem', self.target.__setitem__)(key)
-
-    def __len__(self):
-        return getattr(self.handler, 'len', self.target.__len__)()
-
-    def __iter__(self):
-        return getattr(self.handler, 'iter', self.target.__iter__)()
-
-    def __keys__(self):
-        return getattr(self.handler, 'keys', self.target.__keys__)()
-
+def debounce(delay, enter=False):
+    timer = {}
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, immediate=False,**kwds):
+            if immediate:
+                func(*args, **kwds)
+                if func in timer:
+                    timer[func].cancel()
+                    del timer[func]
+            else:
+                if func in timer: timer[func].cancel()
+                if enter:
+                    def inner():
+                        del timer[func]
+                    if func not in timer:
+                        func(*args, **kwds)
+                else:
+                    def inner():
+                        func(*args, **kwds)
+                        del timer[func]
+                t = threading.Timer(delay, inner)
+                timer[func] = t
+                t.start()
+        return wrapper
+    return decorator
