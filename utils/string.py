@@ -14,6 +14,8 @@ def errString(e: Exception):
     except:
         return str(e)
 
+def remainder(n:int, d:int): return 0 if n==0 else (n%d or n)
+
 def random_num(length: int = 5):
     return ''.join(random.choice(digits) for _ in range(length))
 
@@ -24,14 +26,24 @@ def random_word(length: int = 6):
     return ''.join(random.choice(digits + ascii_letters) for _ in range(length))
 
 def string_width(text):
+    """
+    Return the width of a string in terminal columns.
+    """
+    if not text: return 0
     return wcwidth.wcswidth(text) 
 
 def maxwidth(text, width):
-    if len(text) > width:
-        return text[:width-3]+ '...'
+    """
+    Return a truncated version of a string that fits in a given width.
+    """
+    if string_width(text) > width:
+        return split_bywidth(text,width-3)[0] + '...'
     return text
 
 def split_bywidth(str:str, width:int):
+    """
+    Split a string into a list of substrings that have the same or less width.
+    """
     list = []
     chunk = ''
     count = 0
@@ -51,6 +63,9 @@ def split_bywidth(str:str, width:int):
     return list
 
 def splitstrings_bywidth(lines:list[str], width:int, a:int=None, b:int=None):
+    """
+    Split a list of strings into a list of tuples containing substrings, line index and fragment index.
+    """
     result = []
     a = 0 if a == None else max(0, min(a, len(lines)))
     b = len(lines) if b == None else min(b, len(lines))
@@ -61,6 +76,7 @@ def splitstrings_bywidth(lines:list[str], width:int, a:int=None, b:int=None):
             text = fragments[j]
             result.append((text, i, j))
     return result
+
 
 def split_first(args_text, spliter, nosp = False):
     try:

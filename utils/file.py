@@ -1,4 +1,5 @@
 import pathlib
+import json
 
 def mktree(tree, base=''):
     for path in tree:
@@ -31,5 +32,13 @@ def read_text(path: str):
 def unlink(path: str):
     pathlib.Path(path).unlink()
 
-def io(path):
+def io(path: str):
     return open(path, encoding='utf-8')
+
+def loads(path: str):
+    with open(path, encoding='utf-8') as io:
+        return json.load(io)
+
+def dumps(o, path: str):
+    with open(path, encoding='utf-8') as io:
+        return json.dump(o, io,ensure_ascii=False)

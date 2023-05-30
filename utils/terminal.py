@@ -100,12 +100,14 @@ def extactText(text):
     return fragments
 
 
-def __initscr():
+class _CursesWindow: ...
+
+def __initscr()->_CursesWindow:
     curses.stdscr = Proxy(initscr(), WindowHandler)
     return curses.stdscr
 
 @wraps(newwin)
-def __newwin(*args,**kwds):
+def __newwin(*args,**kwds)->_CursesWindow:
     return Proxy(newwin(*args, **kwds), WindowHandler)
 
 curses.__start_color = False
@@ -125,8 +127,12 @@ class WindowHandler:
             return bind(derwin, self)
         return getattr(self, name)
 
-@template
-def addstr(self:object, y:int, x: int, str: str, attr:int=0):
+def addstr(self:object, y:int, x: int, str: str, attr:int=0)->_CursesWindow:...
+@overload
+def addstr(self:object, str: str, attr:int=0)->_CursesWindow:...
+addstr = template(addstr)
+@addstr.register
+def _(self:object, y:int, x: int, str: str, attr:int=0):
     if curses.__start_color and has_colors() and attr>0:
         cts = iter(extactText(str))
         self.addstr(y, x, *next(cts))
@@ -142,12 +148,14 @@ def _(self:object, str: str, attr:int=0):
     else:
         self.addstr(''.join(ansi.split(str)), attr)
 
-
-@template
-def derwin(self:object, nlines: int, ncols: int, begin_y: int, begin_x: int):
+@overload
+def derwin(self:object, nlines: int, ncols: int, begin_y: int, begin_x: int)->_CursesWindow:...
+@overload
+def derwin(self:object, begin_y: int, begin_x: int)->_CursesWindow:...
+derwin = template(derwin)
+@derwin.register
+def _(self:object, nlines: int, ncols: int, begin_y: int, begin_x: int):
     return Proxy(self.derwin(nlines, ncols, begin_y, begin_x), WindowHandler)
-
-
 @derwin.register
 def _(self:object, begin_y: int, begin_x: int):
     return Proxy(self.derwin(begin_y, begin_x), WindowHandler)
