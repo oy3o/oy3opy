@@ -1,6 +1,12 @@
 [submodule "ai"]
 	path = ai
 	url = git@github.com:oy3o/ai.git
+[submodule "bot"]
+	path = bot
+	url = git@github.com:oy3o/bot.git
+[submodule "chat"]
+	path = chat
+	url = git@github.com:oy3o/chat.git
 [submodule "dataflow"]
 	path = dataflow
 	url = git@github.com:oy3o/dataflow.git
@@ -16,3 +22,6 @@
 [submodule "translator"]
 	path = translator
 	url = git@github.com:oy3o/translator.git
+[submodule "xray"]
+	path = xray
+	url = git@github.com:oy3o/xray.git
