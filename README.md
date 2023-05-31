@@ -2,6 +2,17 @@
 
 The namespace of oy3o's python package, including some general function libraries and some type definitions and decorators
 
+## install
+Dependencies are still under development, so direct installation is not recommended.
+Currently you can use this method to temporarily use it
+```
+mkdir /home/$USER/python/ #create a folder for github's python code
+cd /home/$USER/python/github # enter the folder
+git clone --recursive https://github.com/oy3o/oy3opy.git # clone the main repo
+export PYTHONPATH=$PATHONPATH:/home/$USER/python/github # add the directory in your environment variable
+# then, use it in your code.
+```
+
 ## template (overload with multi type hint)
 A decorator that implements a template pattern for a generic function.
 - :param declare: a function that declares the generic type
@@ -143,9 +154,9 @@ e.g. `file.mktree(['a', 'b', {'c': ['d', 'e']}])`
 
 ## string display width helper
 - `string_width(text)`: Return the width of a string in terminal columns.
-- `maxwidth(text, width)`: Return a truncated version of a string that fits in a given width.
+- `string_width_fits(text, width)`: Return a truncated version of a string that fits in a given width.
 - `split_bywidth(str:str, width:int)`: Split a string into a list of substrings that have the same or less width.
-- `splitstrings_bywidth(lines:list[str], width:int, a:int=None, b:int=None)`: Split a list of strings into a list of tuples containing substrings, line index and fragment index.
+- `split_bywidth_strings(lines:list[str], width:int, a:int=None, b:int=None)`: Split a list of strings into a list of tuples containing substrings, line index and fragment index.
 
 ## token helper
 - `Token().count(text)`

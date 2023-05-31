@@ -14,7 +14,6 @@ def errString(e: Exception):
     except:
         return str(e)
 
-def remainder(n:int, d:int): return 0 if n==0 else (n%d or n)
 
 def random_num(length: int = 5):
     return ''.join(random.choice(digits) for _ in range(length))
@@ -32,7 +31,7 @@ def string_width(text):
     if not text: return 0
     return wcwidth.wcswidth(text) 
 
-def maxwidth(text, width):
+def string_width_fits(text, width):
     """
     Return a truncated version of a string that fits in a given width.
     """
@@ -62,7 +61,7 @@ def split_bywidth(str:str, width:int):
         list.append('')
     return list
 
-def splitstrings_bywidth(lines:list[str], width:int, a:int=None, b:int=None):
+def split_bywidth_strings(lines:list[str], width:int, a:int=None, b:int=None):
     """
     Split a list of strings into a list of tuples containing substrings, line index and fragment index.
     """
